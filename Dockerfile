@@ -19,7 +19,7 @@ ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o simpleton-server ./cmd/simpleton
 
 # Stage 2: Create the final minimal image
-FROM scratch
+FROM busybox:latest
 
 # Copy necessary system files for timezone and DNS resolution
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
@@ -30,3 +30,6 @@ COPY --from=builder /app/simpleton-server /simpleton-server
 
 # Set the entrypoint
 ENTRYPOINT ["/simpleton-server"]
+
+# Set the content directory
+CMD ["/www"]

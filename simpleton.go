@@ -3,27 +3,23 @@ package simpleton
 import (
 	"context"
 	"fmt"
-	"log"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 )
 
 type Simpleton struct {
 	listenAddr string
 	absPath    string
-	accessLog  *log.Logger
-	errorLog   *log.Logger
-	logMutex   sync.Mutex
+	accessLog  io.Writer
+	errorLog   io.Writer
 }
 
 func New(listenAddr string, contentDir string) (*Simpleton, error) {
 	// resolve the absolute path of the content directory
-	fmt.Println("contentDir: ", contentDir)
 	absPath, err := filepath.Abs(contentDir)
-	fmt.Println("absPath: ", absPath)
 	if err != nil {
 		return nil, err
 	}
@@ -31,39 +27,36 @@ func New(listenAddr string, contentDir string) (*Simpleton, error) {
 	// check that we can serve from the content directory
 	fileInfo, err := os.Stat(absPath)
 	if err != nil {
-		fmt.Println("os.Stat: ", err)
 		return nil, err
 	}
 
 	// check that the content directory is a directory
 	if !fileInfo.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", absPath)
+		return nil, fmt.Errorf("%s is not a directory\n", absPath)
 	}
 
 	s := &Simpleton{
 		listenAddr: listenAddr,
 		absPath:    absPath,
-		accessLog:  log.Default(),
-		errorLog:   log.Default(),
+		accessLog:  os.Stdout,
+		errorLog:   os.Stderr,
 	}
 
 	return s, nil
 }
 
-func (s *Simpleton) SetAccessLog(logger *log.Logger) *Simpleton {
+func (s *Simpleton) SetAccessLog(logger io.Writer) *Simpleton {
 	s.accessLog = logger
 	return s
 }
 
-func (s *Simpleton) SetErrorLog(logger *log.Logger) *Simpleton {
+func (s *Simpleton) SetErrorLog(logger io.Writer) *Simpleton {
 	s.errorLog = logger
 	return s
 }
 
-func (s *Simpleton) logCommonFormat(remoteAddr, method, path, proto string, statusCode, contentLength int, startTime time.Time) {
-	s.logMutex.Lock()
-	defer s.logMutex.Unlock()
-	s.accessLog.Printf("%s - - [%s] \"%s %s %s\" %d %d",
+func (s *Simpleton) log(remoteAddr, method, path, proto string, statusCode, contentLength int, startTime time.Time) {
+	fmt.Fprintf(s.accessLog, "%s - - [%s] \"%s %s %s\" %d %d\n",
 		remoteAddr,
 		startTime.Format("02/Jan/2006:15:04:05 -0700"),
 		method,
@@ -75,24 +68,24 @@ func (s *Simpleton) logCommonFormat(remoteAddr, method, path, proto string, stat
 }
 
 func (s *Simpleton) Serve(ctx context.Context) error {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	server := &http.Server{Addr: s.listenAddr}
+	server.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		startTime := time.Now()
 		filePath := filepath.Clean(s.absPath + r.URL.Path)
 		ww := &captureWriter{w: w}
 		http.ServeFile(ww, r, filePath)
-		s.logCommonFormat(r.RemoteAddr, r.Method, r.URL.Path, r.Proto, ww.statusCode, ww.contentLength, startTime)
+		s.log(r.RemoteAddr, r.Method, r.URL.Path, r.Proto, ww.statusCode, ww.contentLength, startTime)
 	})
 
-	server := &http.Server{Addr: s.listenAddr}
 	go func() {
-		s.errorLog.Printf("Serving / on %s", s.listenAddr)
+		fmt.Fprintf(s.errorLog, "Serving / on %s\n", s.listenAddr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.errorLog.Printf("Server failed on %s: %v", s.listenAddr, err)
+			fmt.Fprintf(s.errorLog, "Server failed on %s: %v\n", s.listenAddr, err)
 		}
 	}()
 
 	<-ctx.Done()
-	s.errorLog.Println("Shutting down server...")
+	fmt.Fprintf(s.errorLog, "Shutting down server on %s\n", s.listenAddr)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return server.Shutdown(shutdownCtx)

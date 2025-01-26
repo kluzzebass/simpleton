@@ -1,4 +1,7 @@
 
+# use dotenv
+set dotenv-load := true
+
 # Run the server locally
 run:
   @go run cmd/simpleton/main.go test
@@ -10,7 +13,7 @@ srun:
 # Define default target architecture and operating system
 default_target := "linux/amd64"
 # all_targets := "linux/amd64,linux/arm64,linux/arm/v7"
-all_targets := "linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6,linux/386,linux/ppc64le,linux/s390x,linux/riscv64"
+all_targets := "linux/amd64,linux/arm64,linux/arm64/v8,linux/arm/v7,linux/arm/v6,linux/386,linux/ppc64le,linux/s390x,linux/riscv64"
 tag := "kluzz/simpleton:latest"
 
 # Rule to build the Docker image for a specific architecture
