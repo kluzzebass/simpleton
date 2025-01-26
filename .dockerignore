@@ -1,0 +1,9 @@
+# Ignore the test directory
+test/
+
+# Ignore .dockerignore file
+.dockerignore
+
+# Ignore git related files
+.git
+.gitignore
