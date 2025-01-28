@@ -3,7 +3,7 @@ package simpleton
 import (
 	"context"
 	"fmt"
-	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,8 +13,9 @@ import (
 type Simpleton struct {
 	listenAddr string
 	absPath    string
-	accessLog  io.Writer
-	errorLog   io.Writer
+	accessLog  *slog.Logger
+	serverLog  *slog.Logger
+	ncsaLog    *NCSAHandler
 }
 
 func New(listenAddr string, contentDir string) (*Simpleton, error) {
@@ -38,54 +39,54 @@ func New(listenAddr string, contentDir string) (*Simpleton, error) {
 	s := &Simpleton{
 		listenAddr: listenAddr,
 		absPath:    absPath,
-		accessLog:  os.Stdout,
-		errorLog:   os.Stderr,
+		accessLog:  slog.New(slog.NewTextHandler(os.Stdout, nil)),
+		serverLog:  slog.New(slog.NewTextHandler(os.Stderr, nil)),
 	}
 
 	return s, nil
 }
 
-func (s *Simpleton) SetAccessLog(logger io.Writer) *Simpleton {
-	s.accessLog = logger
+func (s *Simpleton) SetAccessLog(file *os.File) *Simpleton {
+	s.accessLog = slog.New(NewNCSAHandler(file))
 	return s
 }
 
-func (s *Simpleton) SetErrorLog(logger io.Writer) *Simpleton {
-	s.errorLog = logger
+func (s *Simpleton) SetServerLog(file *os.File) *Simpleton {
+	s.serverLog = slog.New(slog.NewTextHandler(file, nil))
 	return s
 }
 
-func (s *Simpleton) log(remoteAddr, method, path, proto string, statusCode, contentLength int, startTime time.Time) {
-	fmt.Fprintf(s.accessLog, "%s - - [%s] \"%s %s %s\" %d %d\n",
-		remoteAddr,
-		startTime.Format("02/Jan/2006:15:04:05 -0700"),
-		method,
-		path,
-		proto,
-		statusCode,
-		contentLength,
+func (s *Simpleton) log(remoteAddr, method, path, proto string, statusCode, contentLength int) {
+	s.accessLog.Info(
+		"access",
+		"host", remoteAddr,
+		"user", "-",
+		"method", method,
+		"path", path,
+		"protocol", proto,
+		"status", statusCode,
+		"size", contentLength,
 	)
 }
 
 func (s *Simpleton) Serve(ctx context.Context) error {
 	server := &http.Server{Addr: s.listenAddr}
 	server.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		startTime := time.Now()
 		filePath := filepath.Clean(s.absPath + r.URL.Path)
 		ww := &captureWriter{w: w}
 		http.ServeFile(ww, r, filePath)
-		s.log(r.RemoteAddr, r.Method, r.URL.Path, r.Proto, ww.statusCode, ww.contentLength, startTime)
+		s.log(r.RemoteAddr, r.Method, r.URL.Path, r.Proto, ww.statusCode, ww.contentLength)
 	})
 
 	go func() {
-		fmt.Fprintf(s.errorLog, "Serving / on %s\n", s.listenAddr)
+		s.serverLog.Info("serving", "listenAddr", s.listenAddr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(s.errorLog, "Server failed on %s: %v\n", s.listenAddr, err)
+			s.serverLog.Error("server failed", "listenAddr", s.listenAddr, "error", err)
 		}
 	}()
 
 	<-ctx.Done()
-	fmt.Fprintf(s.errorLog, "Shutting down server on %s\n", s.listenAddr)
+	s.serverLog.Info("shutting down", "listenAddr", s.listenAddr)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return server.Shutdown(shutdownCtx)

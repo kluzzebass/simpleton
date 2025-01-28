@@ -18,7 +18,7 @@ import (
 type Settings struct {
 	ListenAddrs   string
 	AccessLogPath string
-	ErrorLogPath  string
+	ServerLogPath string
 	Chroot        bool
 	HelpFlag      bool
 	ContentPath   string
@@ -27,7 +27,7 @@ type Settings struct {
 func (s *Settings) ParseFlags() {
 	flag.StringVar(&s.ListenAddrs, "l", "0.0.0.0:80,[::]:80", "Comma-separated list of addresses to listen on")
 	flag.StringVar(&s.AccessLogPath, "a", "-", "Path to access log file")
-	flag.StringVar(&s.ErrorLogPath, "e", "-", "Path to error log file")
+	flag.StringVar(&s.ServerLogPath, "s", "-", "Path to server log file")
 	flag.BoolVar(&s.Chroot, "c", false, "Chroot to content directory")
 	flag.BoolVar(&s.HelpFlag, "h", false, "Show help")
 	flag.Parse()
@@ -51,9 +51,9 @@ func (s *Settings) ParseEnv() {
 		s.AccessLogPath = accessLogPath
 	}
 
-	errorLogPath := os.Getenv("SIMPLETON_ERROR_LOG_PATH")
-	if errorLogPath != "" {
-		s.ErrorLogPath = errorLogPath
+	serverLogPath := os.Getenv("SIMPLETON_SERVER_LOG_PATH")
+	if serverLogPath != "" {
+		s.ServerLogPath = serverLogPath
 	}
 
 	chroot := strings.ToLower(os.Getenv("SIMPLETON_CHROOT"))
@@ -90,15 +90,15 @@ func main() {
 	}
 
 	errorLogFile := os.Stderr
-	if settings.ErrorLogPath != "-" {
-		err := os.MkdirAll(filepath.Dir(settings.ErrorLogPath), 0755)
+	if settings.ServerLogPath != "-" {
+		err := os.MkdirAll(filepath.Dir(settings.ServerLogPath), 0755)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to create error log directory: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to create server log directory: %v\n", err)
 			return
 		}
-		errorLogFile, err = os.OpenFile(settings.ErrorLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		errorLogFile, err = os.OpenFile(settings.ServerLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to open error log file: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to open server log file: %v\n", err)
 			return
 		}
 	}
@@ -129,7 +129,7 @@ func main() {
 			}
 			server.
 				SetAccessLog(accessLogFile).
-				SetErrorLog(errorLogFile)
+				SetServerLog(errorLogFile)
 			if err := server.Serve(ctx); err != nil {
 				fmt.Fprintf(errorLogFile, "Failed to start server on %s: %v\n", addr, err)
 				return
