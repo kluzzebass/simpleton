@@ -25,7 +25,7 @@ type Settings struct {
 }
 
 func (s *Settings) ParseFlags() {
-	flag.StringVar(&s.ListenAddrs, "l", "0.0.0.0:80,[::]:80", "Comma-separated list of addresses to listen on")
+	flag.StringVar(&s.ListenAddrs, "l", ":80", "Comma-separated list of addresses to listen on")
 	flag.StringVar(&s.AccessLogPath, "a", "-", "Path to access log file")
 	flag.StringVar(&s.ServerLogPath, "s", "-", "Path to server log file")
 	flag.BoolVar(&s.Chroot, "c", false, "Chroot to content directory")

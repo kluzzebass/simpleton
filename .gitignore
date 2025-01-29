@@ -26,3 +26,7 @@ go.work.sum
 
 # build directory
 build/
+
+# vscode workspace
+.vscode/
+*.code-workspace

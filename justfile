@@ -27,7 +27,7 @@ build target="linux/amd64":
         .
 
 # Rule to build for multiple platforms at once
-build-all:
+build-all: clean
     docker buildx create --use --name multiarch-builder || true
     docker buildx build \
         --platform {{all_targets}} \
